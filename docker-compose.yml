@@ -1,0 +1,6 @@
+name: llm-client
+
+services:
+  client:
+    build:
+      context: .
