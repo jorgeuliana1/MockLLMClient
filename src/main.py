@@ -6,6 +6,7 @@ from client import OpenAIMockClient, AnthropicMockClient, OpenAIError, Anthropic
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("prompt", nargs='+')
+    parser.add_argument("--temperature", default=0.5)
     parser.add_argument("--client", default="OpenAI", choices=("OpenAI", "Anthropic"))
     parser.add_argument("--force-error", action='store_true')
     parser.add_argument("--model", default="gpt-4")
@@ -18,13 +19,14 @@ def main():
     force_error = args.force_error
     prompt = " ".join(args.prompt)
     llm_model = args.model
+    temperature = args.temperature
     
     client_obj = getattr(sys.modules[__name__], class_name_string)
     client = client_obj()
     client.load_llm(llm_model)
     client.config()
     try:
-        response = client.get_response(prompt, force_error=force_error)
+        response = client.get_response(prompt, temperature=temperature, force_error=force_error)
     except (OpenAIError, AnthropicError) as e:
         client.error_handle(e)
     

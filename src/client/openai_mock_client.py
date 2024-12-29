@@ -1,15 +1,14 @@
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 import time
 import json
-
+from pydantic import BaseModel
 from .llm_client import LLMClient
 
 class OpenAIError(Exception):
-    def __init__(self, message, num, error_type, code, param=None):
+    def __init__(self, message: str, num: int, error_type: str, code: str, param: Optional[Any] = None):
         error_msg_template = (
             "Error code {num} - {{\"error\": {{\"message\": \"{message}\", \"type\": \"{error_type}\", \"param\": \"{param}\", \"code\": \"{code}\"}}}}"
         )
-        
         error_msg = error_msg_template.format(
             num=num,
             message=message,
@@ -17,9 +16,30 @@ class OpenAIError(Exception):
             param=repr(param),
             code=code
         )
-        
         super().__init__(error_msg)
 
+class ChoiceMessage(BaseModel):
+    role: str
+    content: str
+
+class Choice(BaseModel):
+    message: ChoiceMessage
+    finish_reason: str
+    index: int
+
+class Usage(BaseModel):
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+
+class OpenAIResponse(BaseModel):
+    id: str
+    temperature: float
+    object: str
+    created: int
+    model: str
+    usage: Usage
+    choices: List[Choice]
 
 class OpenAIMockClient(LLMClient):
     """OpenAIMockClient
@@ -33,22 +53,24 @@ class OpenAIMockClient(LLMClient):
         """
         super().__init__("OpenAIMockClient")
 
-    def get_response(self, prompt: str, force_error: bool = False, **kwargs) -> Dict[str, Any]:
+    def get_response(self, prompt: str, temperature: float, force_error: bool = False, **kwargs) -> OpenAIResponse:
         """Response handler method
         
         Args:
             prompt (str): User input prompt.
+            temperature (float): LLM temperature.
             force_error (bool): Whether to force an exception raise or not (for simulation purposes).
             kwargs (Dict[str, Any]): Additional arguments.
             
         Returns:
-            Dict[str, Any]: LLM response dictionary.
+            OpenAIResponse: LLM response.
         """
         if force_error:
             raise OpenAIError("Forced OpenAI Error", 404, "invalid_request_error", "forced_error", None)
         
         response = {
             "id": "chat_id",
+            "temperature": temperature,
             "object": "chat.completion",
             "created": int(time.time()),
             "model": self._model_name,
@@ -70,8 +92,7 @@ class OpenAIMockClient(LLMClient):
         }
         
         self.logger.info(f"API response: '{response}'")
-        
-        return response
+        return OpenAIResponse(**response)
         
     def error_handle(self, error: OpenAIError) -> Dict[str, Any]:
         """Error handler method
@@ -90,17 +111,20 @@ class OpenAIMockClient(LLMClient):
         
         self.logger.error(f"An error has occurred: {error_json}")
         return error_json
-    
+
 def unit_test():
     client = OpenAIMockClient()
     client.load_llm("gpt-4o-mini")
-    client.config(arg = "value")
-    client.get_response("My test prompt.")
+    client.config(arg="value")
+
+    response = client.get_response("My test prompt.", temperature=0.7)
+    print(response.json(indent=2))
     
     try:
         client.get_response("", force_error=True)
     except OpenAIError as e:
-        client.error_handle(e)
+        error = client.error_handle(e)
+        print(json.dumps(error, indent=2))
 
 if __name__ == "__main__":
     unit_test()
